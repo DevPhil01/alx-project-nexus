@@ -93,10 +93,6 @@ The goal of this documentation is to:
 - **Frontend Developers:** to test API endpoints, improve integration, and ensure smooth data exchange.
 - **Backend Peers:** to exchange ideas, debug issues, and share implementation strategies.
 
-### Collaboration Platforms:
-- **Discord Channel:** `#ProDevProjectNexus` — for discussions, idea exchange, and feedback.
-- **GitHub Issues & Pull Requests:** for code review and collaboration.
-
 💡 *Tip:* Collaboration enhances learning and ensures better project outcomes!
 
 ---
