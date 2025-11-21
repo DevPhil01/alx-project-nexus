@@ -3,8 +3,10 @@ Django settings for online_poll_system project.
 """
 
 from pathlib import Path
-from decouple import config, Csv
+from decouple import config
 from datetime import timedelta
+import dj_database_url
+import os
 
 # ===========================
 # Paths
@@ -15,8 +17,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 # ===========================
 SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost", cast=Csv())
+DEBUG = config("DEBUG", default=False, cast=bool)
+
+ALLOWED_HOSTS = ["*"]  # Render requires this; you can tighten later
+
+# Production security (Render provides HTTPS)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 # ===========================
 # Application definition
@@ -28,18 +37,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    # Third-party apps
+    
+    # Third-party
     'rest_framework',
-    'rest_framework_simplejwt',  # JWT Authentication
-    'drf_spectacular',  # Modern Swagger/OpenAPI
-
-    # Custom apps
+    'rest_framework_simplejwt',
+    'drf_spectacular',
+    
+    # Local
     'polls',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # ← ADD THIS LINE (right after SecurityMiddleware)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -69,46 +79,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'online_poll_system.wsgi.application'
 
 # ===========================
-# Database configuration
+# Database - Auto-detect Render PostgreSQL or fall back to SQLite locally
 # ===========================
-# Use SQLite locally, PostgreSQL for deployment
-USE_SQLITE = config("USE_SQLITE", default=True, cast=bool)
-
-if USE_SQLITE:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config("DB_NAME"),
-            'USER': config("DB_USER"),
-            'PASSWORD': config("DB_PASSWORD"),
-            'HOST': config("DB_HOST"),
-            'PORT': config("DB_PORT", default="5432"),
-        }
-    }
+DATABASES = {
+    "default": dj_database_url.parse(
+        config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+    )
+}
 
 # ===========================
 # Password validation
 # ===========================
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # ===========================
@@ -117,7 +103,7 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',  # For browsable API
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -133,53 +119,57 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': True,
-    
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
-    'VERIFYING_KEY': None,
-    
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
 # ===========================
-# Swagger/OpenAPI Configuration
+# drf-spectacular (Swagger/OpenAPI)
 # ===========================
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Online Poll System API',
-    'DESCRIPTION': 'API for creating polls, casting votes, and viewing real-time results',
+    'TITLE': 'ALX Project Nexus – Online Poll System API',
+    'DESCRIPTION': 'Real-time polling system with JWT authentication',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    
-    # Authentication
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': r'/api',
-    
-    # UI Settings
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,
         'persistAuthorization': True,
         'displayOperationId': True,
     },
-    
-    # Security
-    'SECURITY': [
-        {
-            'Bearer': {
-                'type': 'http',
-                'scheme': 'bearer',
-                'bearerFormat': 'JWT',
-            }
-        }
-    ],
+    'SECURITY': [{'Bearer': []}],
+    'ENUM_NAME_OVERRIDES': {
+        'TokenObtainPair': 'rest_framework_simplejwt.serializers.TokenObtainPairSerializer',
+    },
+}
+
+# ===========================
+# Static files (WhiteNoise)
+# ===========================
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# ===========================
+# Caching - Upstash Redis
+# ===========================
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": config("REDIS_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX": "poll_system"
+    }
 }
 
 # ===========================
@@ -191,20 +181,6 @@ USE_I18N = True
 USE_TZ = True
 
 # ===========================
-# Static files
-# ===========================
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# ===========================
-# Celery & Redis (Optional - for future use)
-# ===========================
-# Uncomment these when you're ready to use Celery
-# REDIS_URL = config("REDIS_URL", default="redis://localhost:6379")
-# CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=REDIS_URL)
-# CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=REDIS_URL)
-
-# ===========================
-# Default primary key field type
+# Default primary key
 # ===========================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
