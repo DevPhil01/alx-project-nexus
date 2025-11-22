@@ -186,10 +186,16 @@ if REDIS_URL:
             "LOCATION": REDIS_URL,
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "CONNECTION_POOL_KWARGS": {"max_connections": 50},
             },
-            "KEY_PREFIX": "poll_system"
+            "KEY_PREFIX": "poll_system",
+            "TIMEOUT": 300,  # 5 minutes default
         }
     }
+    
+    # Session storage in Redis (optional performance boost)
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    SESSION_CACHE_ALIAS = "default"
 else:
     # Fallback to local memory cache
     CACHES = {
@@ -198,6 +204,14 @@ else:
             "LOCATION": "unique-snowflake",
         }
     }
+
+# ===========================
+# Rate Limiting Configuration
+# ===========================
+# Rate limit settings for django-ratelimit
+RATELIMIT_ENABLE = config("RATELIMIT_ENABLE", default=True, cast=bool)
+RATELIMIT_USE_CACHE = 'default'  # Use Redis cache for rate limiting
+RATELIMIT_VIEW = 'polls.views.rate_limited_error'  # Custom error view (we'll create this)
 
 # ===========================
 # Internationalization
