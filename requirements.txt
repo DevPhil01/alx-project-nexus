@@ -30,6 +30,9 @@ billiard==4.2.2
 amqp==5.3.1
 vine==5.1.0
 
+# Rate Limiting & Security
+django-ratelimit==4.1.0
+
 # Utilities
 pytz==2025.2
 python-dateutil==2.9.0.post0
