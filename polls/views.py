@@ -9,12 +9,17 @@ This file contains all API logic for:
 5. Viewing poll results in real-time
 
 All views use Django REST Framework (DRF).
+Includes Redis caching and rate limiting for performance and security.
 """
 
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.views import APIView
+from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django_ratelimit.decorators import ratelimit
 
 from .models import Poll, Vote
 from .serializers import (
@@ -30,8 +35,10 @@ from .serializers import (
 
 class PollListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/polls/  → List all ACTIVE polls
+    GET  /api/polls/  → List all ACTIVE polls (cached for 5 minutes)
     POST /api/polls/  → Create a new poll (authenticated users only)
+    
+    Rate limited: 100 requests per hour for list, 10 requests per hour for create
 
     Returns a list of all active polls with their options and vote counts.
     Only active (non-expired) polls are shown.
@@ -61,6 +68,17 @@ class PollListCreateView(generics.ListCreateAPIView):
         return Poll.objects.filter(
             is_active=True
         ).prefetch_related('options').order_by('-created_at')
+    
+    @method_decorator(cache_page(60 * 5))  # Cache for 5 minutes
+    @method_decorator(ratelimit(key='ip', rate='100/h', method='GET'))
+    def get(self, request, *args, **kwargs):
+        """List polls with caching and rate limiting."""
+        return super().get(request, *args, **kwargs)
+    
+    @method_decorator(ratelimit(key='user', rate='10/h', method='POST'))
+    def post(self, request, *args, **kwargs):
+        """Create poll with rate limiting."""
+        return super().post(request, *args, **kwargs)
 
 
 # =====================================================================
@@ -73,9 +91,17 @@ class PollDetailView(generics.RetrieveAPIView):
 
     Retrieve the full details of a poll including its options
     and real-time vote counts.
+    
+    Cached for 2 minutes, rate limited to 60 requests per hour per IP.
     """
     queryset = Poll.objects.prefetch_related('options').all()
     serializer_class = PollSerializer
+    
+    @method_decorator(cache_page(60 * 2))  # Cache for 2 minutes
+    @method_decorator(ratelimit(key='ip', rate='60/h', method='GET'))
+    def get(self, request, *args, **kwargs):
+        """Retrieve poll with caching and rate limiting."""
+        return super().get(request, *args, **kwargs)
 
 
 # =====================================================================
@@ -87,6 +113,8 @@ class VoteCreateView(generics.CreateAPIView):
     POST /api/polls/<poll_id>/vote/
 
     Allows an authenticated user to cast a vote on a poll.
+    
+    Rate limited: 20 votes per hour per user to prevent spam.
 
     Example Request:
     {
@@ -101,6 +129,18 @@ class VoteCreateView(generics.CreateAPIView):
     """
     serializer_class = VoteSerializer
     permission_classes = [IsAuthenticated]
+    
+    @method_decorator(ratelimit(key='user', rate='20/h', method='POST'))
+    def post(self, request, *args, **kwargs):
+        """Create vote with rate limiting and cache invalidation."""
+        response = super().post(request, *args, **kwargs)
+        
+        # Invalidate cache for poll results when a vote is cast
+        if response.status_code == status.HTTP_201_CREATED:
+            poll_id = request.data.get('poll')
+            cache.delete(f'poll_results_{poll_id}')
+        
+        return response
 
 
 # =====================================================================
@@ -127,12 +167,21 @@ class PollResultView(APIView):
         ]
     }
     
+    Results cached for 1 minute. Rate limited to 100 requests per hour.
     Accessible to all users (no authentication required).
     """
     permission_classes = []  # Public endpoint
 
+    @method_decorator(ratelimit(key='ip', rate='100/h', method='GET'))
     def get(self, request, poll_id):
-        # Attempt to retrieve requested poll
+        # Try to get results from cache first
+        cache_key = f'poll_results_{poll_id}'
+        cached_results = cache.get(cache_key)
+        
+        if cached_results:
+            return Response(cached_results, status=status.HTTP_200_OK)
+        
+        # If not in cache, fetch from database
         try:
             poll = Poll.objects.prefetch_related('options').get(id=poll_id)
         except Poll.DoesNotExist:
@@ -154,5 +203,26 @@ class PollResultView(APIView):
             "total_votes": poll.total_votes(),
             "results": results_data
         }
+        
+        # Cache results for 1 minute (60 seconds)
+        cache.set(cache_key, data, 60)
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+# =====================================================================
+# RATE LIMIT ERROR HANDLER
+# =====================================================================
+
+def rate_limited_error(request, exception):
+    """
+    Custom view for rate limit errors.
+    Returns a JSON response instead of HTML.
+    """
+    return Response(
+        {
+            "error": "Rate limit exceeded",
+            "detail": "Too many requests. Please try again later."
+        },
+        status=status.HTTP_429_TOO_MANY_REQUESTS
+    )
