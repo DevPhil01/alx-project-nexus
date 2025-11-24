@@ -21,7 +21,11 @@ SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
 
 # Dynamic ALLOWED_HOSTS
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost", cast=Csv())
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="127.0.0.1,localhost",
+    cast=Csv()
+)
 
 # Production security settings (only in production)
 if not DEBUG:
@@ -29,13 +33,14 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # CSRF trusted origins for Render
     CSRF_TRUSTED_ORIGINS = config(
         "CSRF_TRUSTED_ORIGINS",
-        default="",
+        default="https://*.onrender.com",
         cast=Csv()
     )
+
 
 # ===========================
 # Application definition
