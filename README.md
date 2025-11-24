@@ -35,9 +35,9 @@ A production-ready Django REST API for creating polls, casting votes, and viewin
 - 🚀 **Production Ready** - Deployed on Render with PostgreSQL
 
 ### Live Demo
-- **API Base URL:** `https://your-app.onrender.com/api/`
-- **Swagger Documentation:** `https://your-app.onrender.com/api/docs/`
-- **Admin Panel:** `https://your-app.onrender.com/admin/`
+- **API Base URL:** `https://online-poll-system-scfg.onrender.com/api/`
+- **Swagger Documentation:** `https://online-poll-system-scfg.onrender.com/api/docs/`
+- **Admin Panel:** `https://https://online-poll-system-scfg.onrender.com/admin/`
 
 ### Tech Stack
 - **Backend:** Django 5.0, Django REST Framework
