@@ -20,8 +20,13 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-
+from views import home
 urlpatterns = [
+
+    # ===========================
+    # Home page
+    # ===========================
+    path("", home, name="home"),
     # ===========================
     # Admin Panel
     # ===========================
