@@ -30,16 +30,15 @@ ALLOWED_HOSTS = config(
 # Production security settings (only in production)
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-    # Disable full HTTPS enforcement on Render free plan
-    SECURE_SSL_REDIRECT = False
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
     # CSRF trusted origins for Render
-    CSRF_TRUSTED_ORIGINS = (
-        "https://*.onrender.com",
-        "https://online-poll-system-scfg.onrender.com",
+    CSRF_TRUSTED_ORIGINS = config(
+        "CSRF_TRUSTED_ORIGINS",
+        default="https://*.onrender.com",
+        cast=Csv()
     )
 
 
