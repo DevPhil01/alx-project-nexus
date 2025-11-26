@@ -14,7 +14,7 @@ Includes Redis caching and rate limiting for performance and security.
 
 from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
@@ -36,7 +36,7 @@ from .serializers import (
 class PollListCreateView(generics.ListCreateAPIView):
     """
     GET  /api/polls/  → List all ACTIVE polls (cached for 5 minutes)
-    POST /api/polls/  → Create a new poll (authenticated users only)
+    POST /api/polls/  → Create a new poll (ADMIN ONLY)
     
     Rate limited: 100 requests per hour for list, 10 requests per hour for create
 
@@ -52,7 +52,16 @@ class PollListCreateView(generics.ListCreateAPIView):
         "options": ["Python", "Go", "JavaScript"]
     }
     """
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_permissions(self):
+        """
+        Different permissions for different methods:
+        - GET: Anyone can view (IsAuthenticatedOrReadOnly)
+        - POST: Only admins can create (IsAdminUser)
+        """
+        if self.request.method == 'POST':
+            return [IsAdminUser()]
+        return [IsAuthenticatedOrReadOnly()]
     
     def get_serializer_class(self):
         """Use different serializers for list vs create."""
@@ -77,7 +86,7 @@ class PollListCreateView(generics.ListCreateAPIView):
     
     @method_decorator(ratelimit(key='user', rate='10/h', method='POST'))
     def post(self, request, *args, **kwargs):
-        """Create poll with rate limiting."""
+        """Create poll with rate limiting (admin only)."""
         return super().post(request, *args, **kwargs)
 
 
