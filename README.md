@@ -127,9 +127,15 @@ python manage.py runserver
 ```
 
 #### Access Points
+**For Local testing**
 - **API:** http://127.0.0.1:8000/api/polls/
 - **Swagger Docs:** http://127.0.0.1:8000/api/docs/
 - **Admin Panel:** http://127.0.0.1:8000/admin/
+
+**For deployed version**
+- **API:** http://host url/api/polls/
+- **Swagger Docs:** http://host url/api/docs/
+- **Admin Panel:** http://host url/admin/
 
 ### Usage Examples
 
