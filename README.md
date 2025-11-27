@@ -42,6 +42,10 @@ A production-ready Django REST API for creating polls, casting votes, and viewin
 - **Swagger Documentation:** `https://online-poll-system-scfg.onrender.com/api/docs/`
 - **Admin Panel:** `https://online-poll-system-scfg.onrender.com/admin/`
 
+- For testing, use the admin username and password below:
+  - **Username:** admin
+  - **Password:**  @Admin123
+
 ### User Roles & Permissions
 - **Anonymous Users** - Can view poll lists and results only
 - **Registered Users** - Can register, login, vote, and view results
