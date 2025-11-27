@@ -27,39 +27,60 @@ The goal of this documentation is to:
 A production-ready Django REST API for creating polls, casting votes, and viewing real-time results with comprehensive Swagger documentation.
 
 ### Key Features
-- 🗳️ **Poll Management** - Create polls with multiple options, set expiry dates
-- ✅ **Secure Voting** - JWT authentication with duplicate vote prevention
-- 📊 **Real-Time Results** - Efficient vote counting with database optimization
+- 🗳️ **Poll Management** - Create polls with multiple options, set expiry dates (Admin only)
+- 👥 **User Registration** - Email-based registration with password validation
+- 🔐 **JWT Authentication** - Secure token-based authentication
+- ✅ **Secure Voting** - Registered users can vote, with duplicate prevention
+- 📊 **Real-Time Results** - Efficient vote counting with Redis caching
 - 📚 **API Documentation** - Interactive Swagger/OpenAPI documentation
 - 🔒 **Data Integrity** - Database-level constraints and validation
-- 🚀 **Production Ready** - Deployed on Render with PostgreSQL
+- 🛡️ **Rate Limiting** - API abuse prevention with configurable limits
+- 🚀 **Production Ready** - Deployed on Render with PostgreSQL and Redis
 
 ### Live Demo
 - **API Base URL:** `https://online-poll-system-scfg.onrender.com/api/`
 - **Swagger Documentation:** `https://online-poll-system-scfg.onrender.com/api/docs/`
-- **Admin Panel:** `https://https://online-poll-system-scfg.onrender.com/admin/`
+- **Admin Panel:** `https://online-poll-system-scfg.onrender.com/admin/`
+
+### User Roles & Permissions
+- **Anonymous Users** - Can view poll lists and results only
+- **Registered Users** - Can register, login, vote, and view results
+- **Admin Users** - Can create/delete polls, manage users, and access admin panel
 
 ### Tech Stack
 - **Backend:** Django 5.0, Django REST Framework
 - **Database:** PostgreSQL (Production), SQLite (Development)
+- **Caching:** Redis (Upstash)
 - **Authentication:** JWT (djangorestframework-simplejwt)
 - **Documentation:** drf-spectacular (Swagger/OpenAPI 3.0)
+- **Rate Limiting:** django-ratelimit
 - **Deployment:** Render
 - **Version Control:** Git & GitHub
 
 ### API Endpoints
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/token/` | Obtain JWT access & refresh tokens | No |
-| POST | `/api/token/refresh/` | Refresh access token | No |
-| GET | `/api/polls/` | List all active polls | No |
-| POST | `/api/polls/` | Create a new poll | Yes |
-| GET | `/api/polls/{id}/` | Get poll details | No |
-| POST | `/api/polls/{id}/vote/` | Cast a vote | Yes |
-| GET | `/api/polls/{id}/results/` | View poll results | No |
-| GET | `/api/docs/` | Swagger UI documentation | No |
-| GET | `/api/redoc/` | ReDoc documentation | No |
+| Method | Endpoint | Description | Auth Required | Admin Only |
+|--------|----------|-------------|---------------|------------|
+| **Authentication & User Management** |
+| POST | `/api/auth/register/` | Register a new user account | No | No |
+| POST | `/api/token/` | Login - obtain JWT access & refresh tokens | No | No |
+| POST | `/api/token/refresh/` | Refresh access token | No | No |
+| GET | `/api/auth/me/` | Get current user profile | Yes | No |
+| PUT | `/api/auth/me/` | Update user profile | Yes | No |
+| PATCH | `/api/auth/me/` | Partially update user profile | Yes | No |
+| POST | `/api/auth/change-password/` | Change password | Yes | No |
+| GET | `/api/auth/users/` | List all registered users | Yes | Yes |
+| **Poll Management** |
+| GET | `/api/polls/` | List all active polls | No | No |
+| POST | `/api/polls/` | Create a new poll | Yes | Yes |
+| GET | `/api/polls/{id}/` | Get poll details | No | No |
+| **Voting** |
+| POST | `/api/polls/{id}/vote/` | Cast a vote on a poll | Yes | No |
+| GET | `/api/polls/{id}/results/` | View real-time poll results | No | No |
+| **API Documentation** |
+| GET | `/api/docs/` | Swagger UI documentation | No | No |
+| GET | `/api/redoc/` | ReDoc documentation | No | No |
+| GET | `/api/schema/` | OpenAPI schema (JSON/YAML) | No | No |
 
 ### Quick Start
 
@@ -108,20 +129,73 @@ python manage.py runserver
 
 ### Usage Examples
 
-#### 1. Obtain JWT Token
+#### 1. Register a New User
 ```bash
-curl -X POST http://127.0.0.1:8000/api/token/ \
+curl -X POST https://online-poll-system-scfg.onrender.com/api/auth/register/ \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "your_username",
-    "password": "your_password"
+    "username": "john_doe",
+    "email": "john@example.com",
+    "password": "SecurePass123!",
+    "password2": "SecurePass123!",
+    "first_name": "John",
+    "last_name": "Doe"
   }'
 ```
 
-#### 2. Create a Poll
+**Response:**
+```json
+{
+  "id": 1,
+  "username": "john_doe",
+  "email": "john@example.com",
+  "first_name": "John",
+  "last_name": "Doe",
+  "message": "User registered successfully. Please login to get your access token."
+}
+```
+
+#### 2. Login to Get JWT Token
 ```bash
-curl -X POST http://127.0.0.1:8000/api/polls/ \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST https://online-poll-system-scfg.onrender.com/api/token/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "SecurePass123!"
+  }'
+```
+
+**Response:**
+```json
+{
+  "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### 3. Get Your Profile
+```bash
+curl -X GET https://online-poll-system-scfg.onrender.com/api/auth/me/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "username": "john_doe",
+  "email": "john@example.com",
+  "first_name": "John",
+  "last_name": "Doe",
+  "is_admin": false,
+  "date_joined": "2025-11-26T10:00:00Z"
+}
+```
+
+#### 4. Create a Poll (Admin Only)
+```bash
+curl -X POST https://online-poll-system-scfg.onrender.com/api/polls/ \
+  -H "Authorization: Bearer ADMIN_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Favorite Programming Language?",
@@ -131,9 +205,9 @@ curl -X POST http://127.0.0.1:8000/api/polls/ \
   }'
 ```
 
-#### 3. Cast a Vote
+#### 5. Cast a Vote (Registered Users)
 ```bash
-curl -X POST http://127.0.0.1:8000/api/polls/1/vote/ \
+curl -X POST https://online-poll-system-scfg.onrender.com/api/polls/1/vote/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,9 +216,34 @@ curl -X POST http://127.0.0.1:8000/api/polls/1/vote/ \
   }'
 ```
 
-#### 4. View Results
+#### 6. View Poll Results (Public)
 ```bash
-curl http://127.0.0.1:8000/api/polls/1/results/
+curl https://online-poll-system-scfg.onrender.com/api/polls/1/results/
+```
+
+**Response:**
+```json
+{
+  "poll": "Favorite Programming Language?",
+  "total_votes": 45,
+  "results": [
+    {"option": "Python", "votes": 20},
+    {"option": "JavaScript", "votes": 15},
+    {"option": "Go", "votes": 7},
+    {"option": "Rust", "votes": 3}
+  ]
+}
+```
+
+#### 7. Change Password
+```bash
+curl -X POST https://online-poll-system-scfg.onrender.com/api/auth/change-password/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "old_password": "SecurePass123!",
+    "new_password": "NewSecurePass456!"
+  }'
 ```
 
 ### Database Schema
@@ -184,6 +283,9 @@ curl http://127.0.0.1:8000/api/polls/1/results/
 - ✅ Efficient vote counting with database aggregation
 - ✅ Read-only serializers for list endpoints
 - ✅ JWT token-based authentication (stateless)
+- ✅ Redis caching for poll lists, details, and results
+- ✅ Rate limiting on all endpoints to prevent abuse
+- ✅ Cache invalidation on vote submission for real-time results
 
 ### Testing
 Comprehensive testing performed using:
@@ -196,6 +298,7 @@ Comprehensive testing performed using:
 online_poll_system/
 ├── manage.py
 ├── requirements.txt
+├── build.sh
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -208,8 +311,11 @@ online_poll_system/
     ├── __init__.py
     ├── models.py
     ├── serializers.py
+    ├── auth_serializers.py
     ├── views.py
+    ├── auth_views.py
     ├── urls.py
+    ├── auth_urls.py
     ├── admin.py
     └── migrations/
 ```
@@ -266,8 +372,20 @@ chore: update dependencies
 - **Data Validation:**  
   Implemented comprehensive serializer validation to ensure data integrity at the API level.
 
+- **User Management:**  
+  Built complete user registration and authentication system with email-based accounts.
+
+- **Role-Based Access Control:**  
+  Implemented permission system to distinguish between admin and regular user capabilities.
+
 - **API Documentation:**  
   Automated Swagger documentation generation for interactive API exploration and testing.
+
+- **Caching Strategies:**  
+  Implemented Redis caching to reduce database load and improve response times significantly.
+
+- **Rate Limiting:**  
+  Added API rate limiting to prevent abuse and ensure fair usage across all users.
 
 - **Deployment:**  
   Deployed production-ready applications to cloud platforms with PostgreSQL databases.
@@ -284,6 +402,9 @@ chore: update dependencies
 | **API Documentation** | Keeping documentation in sync with code | Used drf-spectacular for auto-generated Swagger docs |
 | **Production Deployment** | Environment-specific configurations | Used python-decouple for environment variable management |
 | **Vote Counting Performance** | Slow aggregation with growing data | Added database indexes and optimized count queries |
+| **Redis Configuration** | Cache connection errors in production | Properly configured Upstash Redis with fallback to local cache |
+| **Rate Limiting** | API abuse and spam voting | Implemented django-ratelimit with Redis backend |
+| **Permission Management** | Unauthorized poll creation | Added role-based permissions (admin vs regular users) |
 
 ---
 
@@ -343,6 +464,7 @@ This repository stands as a reflection of my journey, growth, and readiness to t
 **GitHub:** [DevPhil01](https://github.com/DevPhil01)  
 
 
+
 ---
 
 ## 📄 License
@@ -356,3 +478,6 @@ This project is open source and available under the [MIT License](LICENSE).
 - ALX Africa for the comprehensive backend engineering curriculum
 - The Django and DRF communities for excellent documentation
 - Fellow ALX learners for collaboration and support
+
+## NOTE
+This is only the backend of the project. For full functionality, one needs to develop the front end section.
