@@ -133,7 +133,7 @@ python manage.py runserver
 - **Admin Panel:** http://127.0.0.1:8000/admin/
 
 **For deployed version**
-Depending the the platform of choice, the access points may take the following forms:
+- Depending the the platform of choice, the access points may take the following forms:
 - **API:** http://host_url/api/polls/
 - **Swagger Docs:** http://host_url/api/docs/
 - **Admin Panel:** http://host_url/admin/
