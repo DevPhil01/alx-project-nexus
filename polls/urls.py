@@ -8,8 +8,12 @@ voting, listing, retrieving details, and viewing poll results.
 
 from django.urls import path
 from . import views
+from .views import ApiIndexView
+
 
 urlpatterns = [
+    path("", ApiIndexView.as_view(), name="api-index"),
+    
     # ===========================
     # POLL ROUTES
     # ===========================
