@@ -28,6 +28,68 @@ from .serializers import (
     VoteSerializer
 )
 
+# =====================================================================
+# 0. API INDEX VIEW 
+# =====================================================================
+
+class ApiIndexView(APIView):
+    """
+    GET /api/
+
+    Returns a structured list of all available API endpoints for the project.
+    This is useful when visiting the base API URL so users can quickly see
+    the available routes without navigating to Swagger.
+
+    Example Response:
+    {
+        "polls": {
+            "list_create": "/api/polls/",
+            "detail": "/api/polls/<id>/",
+            "vote": "/api/polls/<id>/vote/",
+            "results": "/api/polls/<id>/results/"
+        },
+        "auth": {
+            "register": "/api/auth/register/",
+            "login": "/api/auth/login/"
+        },
+        "jwt": {
+            "token_obtain": "/api/token/",
+            "token_refresh": "/api/token/refresh/"
+        },
+        "documentation": {
+            "swagger": "/api/docs/",
+            "redoc": "/api/redoc/",
+            "schema": "/api/schema/"
+        }
+    }
+    """
+
+    permission_classes = []  # Public endpoint
+
+    def get(self, request):
+        data = {
+            "polls": {
+                "list_create": "/api/polls/",
+                "detail": "/api/polls/<id>/",
+                "vote": "/api/polls/<id>/vote/",
+                "results": "/api/polls/<id>/results/"
+            },
+            "auth": {
+                "register": "/api/auth/register/",
+                "login": "/api/auth/login/",
+            },
+            "jwt": {
+                "token_obtain": "/api/token/",
+                "token_refresh": "/api/token/refresh/"
+            },
+            "documentation": {
+                "swagger": "/api/docs/",
+                "redoc": "/api/redoc/",
+                "schema": "/api/schema/"
+            }
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
 
 # =====================================================================
 # 1. LIST ALL ACTIVE POLLS & CREATE NEW POLLS
@@ -54,39 +116,27 @@ class PollListCreateView(generics.ListCreateAPIView):
     """
     
     def get_permissions(self):
-        """
-        Different permissions for different methods:
-        - GET: Anyone can view (IsAuthenticatedOrReadOnly)
-        - POST: Only admins can create (IsAdminUser)
-        """
         if self.request.method == 'POST':
             return [IsAdminUser()]
         return [IsAuthenticatedOrReadOnly()]
     
     def get_serializer_class(self):
-        """Use different serializers for list vs create."""
         if self.request.method == 'POST':
             return PollCreateSerializer
         return PollSerializer
     
     def get_queryset(self):
-        """
-        Retrieve polls that are still active.
-        Optimized with prefetch_related to avoid N+1 queries.
-        """
         return Poll.objects.filter(
             is_active=True
         ).prefetch_related('options').order_by('-created_at')
     
-    @method_decorator(cache_page(60 * 5))  # Cache for 5 minutes
+    @method_decorator(cache_page(60 * 5))
     @method_decorator(ratelimit(key='ip', rate='100/h', method='GET'))
     def get(self, request, *args, **kwargs):
-        """List polls with caching and rate limiting."""
         return super().get(request, *args, **kwargs)
     
     @method_decorator(ratelimit(key='user', rate='10/h', method='POST'))
     def post(self, request, *args, **kwargs):
-        """Create poll with rate limiting (admin only)."""
         return super().post(request, *args, **kwargs)
 
 
@@ -106,10 +156,9 @@ class PollDetailView(generics.RetrieveAPIView):
     queryset = Poll.objects.prefetch_related('options').all()
     serializer_class = PollSerializer
     
-    @method_decorator(cache_page(60 * 2))  # Cache for 2 minutes
+    @method_decorator(cache_page(60 * 2))
     @method_decorator(ratelimit(key='ip', rate='60/h', method='GET'))
     def get(self, request, *args, **kwargs):
-        """Retrieve poll with caching and rate limiting."""
         return super().get(request, *args, **kwargs)
 
 
@@ -123,7 +172,7 @@ class VoteCreateView(generics.CreateAPIView):
 
     Allows an authenticated user to cast a vote on a poll.
     
-    Rate limited: 20 votes per hour per user to prevent spam.
+    Rate limited: 20 votes per hour per user.
 
     Example Request:
     {
@@ -131,20 +180,18 @@ class VoteCreateView(generics.CreateAPIView):
         "option": 3
     }
 
-    The VoteSerializer automatically:
-    - Ensures the poll is active and not expired
-    - Ensures the user has not voted before
-    - Ensures the option belongs to the selected poll
+    Validates:
+    - Poll is active and not expired
+    - User has not voted already
+    - Option belongs to the poll
     """
     serializer_class = VoteSerializer
     permission_classes = [IsAuthenticated]
     
     @method_decorator(ratelimit(key='user', rate='20/h', method='POST'))
     def post(self, request, *args, **kwargs):
-        """Create vote with rate limiting and cache invalidation."""
         response = super().post(request, *args, **kwargs)
         
-        # Invalidate cache for poll results when a vote is cast
         if response.status_code == status.HTTP_201_CREATED:
             poll_id = request.data.get('poll')
             cache.delete(f'poll_results_{poll_id}')
@@ -160,37 +207,25 @@ class PollResultView(APIView):
     """
     GET /api/polls/<poll_id>/results/
 
-    Returns real-time results for a poll including:
+    Returns real-time results including:
     - poll title
     - total votes
-    - each option with its vote count
+    - each option and its vote count
 
-    Example Response:
-    {
-        "poll": "Favourite Fruit",
-        "total_votes": 124,
-        "results": [
-            {"option": "Mango", "votes": 80},
-            {"option": "Banana", "votes": 30},
-            {"option": "Apple", "votes": 14}
-        ]
-    }
-    
-    Results cached for 1 minute. Rate limited to 100 requests per hour.
-    Accessible to all users (no authentication required).
+    Cached for 1 minute.
+    Rate limited to 100 requests per hour.
     """
-    permission_classes = []  # Public endpoint
+    permission_classes = []
 
     @method_decorator(ratelimit(key='ip', rate='100/h', method='GET'))
     def get(self, request, poll_id):
-        # Try to get results from cache first
+        
         cache_key = f'poll_results_{poll_id}'
         cached_results = cache.get(cache_key)
         
         if cached_results:
             return Response(cached_results, status=status.HTTP_200_OK)
         
-        # If not in cache, fetch from database
         try:
             poll = Poll.objects.prefetch_related('options').get(id=poll_id)
         except Poll.DoesNotExist:
@@ -199,21 +234,18 @@ class PollResultView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Collect option results using the model method
         options = poll.options.all()
         results_data = [
             {"option": option.text, "votes": option.vote_count()}
             for option in options
         ]
 
-        # Summary data
         data = {
             "poll": poll.title,
             "total_votes": poll.total_votes(),
             "results": results_data
         }
         
-        # Cache results for 1 minute (60 seconds)
         cache.set(cache_key, data, 60)
 
         return Response(data, status=status.HTTP_200_OK)
@@ -225,8 +257,7 @@ class PollResultView(APIView):
 
 def rate_limited_error(request, exception):
     """
-    Custom view for rate limit errors.
-    Returns a JSON response instead of HTML.
+    Custom view for handling rate-limit errors.
     """
     return Response(
         {
